@@ -1,8 +1,15 @@
 {
     "files.associations": {
-        "esp_littlefs.h": "c",
         "gpsdriver.h": "c"
     },
-    "idf.portWin": "COM3",
-    "idf.flashType": "UART"
+    "idf.port": "/dev/ttyUSB0",
+    "idf.flashType": "UART",
+    "idf.currentSetup": "/home/greenclover/.espressif/v5.5.2/esp-idf",
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32"
+    },
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+    ]
 }

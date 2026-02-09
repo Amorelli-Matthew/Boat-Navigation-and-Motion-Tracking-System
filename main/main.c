@@ -7,12 +7,19 @@
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "EventHandling.h"
 #include "GPSDriver.h"
 #include "string.h"
 #include "freertos/FreeRTOS.h" 
 #include "freertos/task.h"    
 #include "driver/uart.h"
+
+
+//my custom librarys
+#include "EventHandling.h"
+#include "BluetoothConnection.h"
+
+
+
 #define GPRMCLENGTH 128
 #define GPGGALENGTH 96
 #define GPVTGLENTH 80
@@ -31,7 +38,7 @@ int length;
   const int uart_buffer_size;
 } GPS_Parms;
 
-static const char *TAG = "GPS";
+//static const char *TAG = "GPS";
 
 
 static void GPS_sensor(void *pv)
@@ -139,7 +146,7 @@ static void GPS_sensor(void *pv)
 }
 
 
-static void gps_task(void *arg) {
+static void virtual_gps_task(void *arg) {
 
      char gprmcString[128];
      char gpggaString[96];
@@ -147,7 +154,7 @@ static void gps_task(void *arg) {
 
      TickType_t last = xTaskGetTickCount();
     
-     const TickType_t period = pdMS_TO_TICKS(5000); // 5000 ms
+     const TickType_t period = pdMS_TO_TICKS(2000); // 5000 ms
 
      for (;;) {
          generateRandomGPRMC(gprmcString, GPRMCLENGTH);  // ensure it writes "\r\n" and '\0'
@@ -155,8 +162,8 @@ static void gps_task(void *arg) {
         //     fix line ending if needed
          size_t n = strnlen(gprmcString,GPRMCLENGTH);
 
-         if (n >= 2 && !(gprmcString[n-2] == '\r' && gprmcString[n-1] == '\n')) {
-             if (n + 2 < sizeof gpvtgString) {
+        if (n >= 2 && !(gprmcString[n-2] == '\r' && gprmcString[n-1] == '\n')) {
+            if (n + 2 < sizeof gpvtgString) {
                  gprmcString[n++] = '\r';
                  gprmcString[n++] = '\n';
                  gprmcString[n] = '\0';
@@ -165,28 +172,29 @@ static void gps_task(void *arg) {
 
         generateRandomGPGGA(gpggaString, GPGGALENGTH);
        generateRandomGPVTG(gpvtgString, GPVTGLENTH);
-        printf("%s\n%s\n%s\n", gprmcString,gpggaString,gpvtgString);  // print
-      //  printf("%s\n", gpggaString);  // print
-       
-       // vTaskDelayUntil(&last, period);  // yields reliably; Idle tasks get time, WDT stays happy
-    vTaskDelete(NULL); 
+
+     //   printf("%s\n%s\n%s\n", gprmcString,gpggaString,gpvtgString);  // print
+     //   printf("Size of GpsData: %zu bytes\n", sizeof(GpsData));
+     //  printf("%s\n", gprmcString);  // print
+      ParseGPRMCMessage(gprmcString,128);
+
+        vTaskDelayUntil(&last, period);  // yields reliably; Idle tasks get time, WDT stays happy
+   // vTaskDelete(NULL); 
     }
 }
+
 void app_main(void) {
 
-     //  xTaskCreatePinnedToCore(GPS_sensor, "gps_task", 4096, NULL, 1, NULL, 1);
+    init_bluetooth_attributes();
+
+//bluetooth is not a freertos task!
+//Bluetooth_task();
 
 //  xTaskCreatePinnedToCore(GPS_sensor, "GPS_sensor", 4096, (void*)GPSParms, 1, NULL, 1);
 
-xTaskCreatePinnedToCore(GPS_sensor, "GPS_sensor", 4096, NULL, 1, NULL, 1);
+xTaskCreatePinnedToCore(virtual_gps_task, "GPS_sensor", 4096, NULL, 1, NULL, 1);
 
+//xTaskCreatePinnedToCore(Bluetooth_task, "Bluetooth", 4096, NULL, 1, NULL, 1);
 
   
 }
-
-
-//MONITOR the power of the esp32
-//  xTaskCreate(Power_Event_Handling, "Power Event Handler", 2048, NULL, 5, NULL);
-//setup_adc();
-
-
