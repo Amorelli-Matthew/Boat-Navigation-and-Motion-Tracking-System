@@ -15,7 +15,6 @@
 
 
 //my custom librarys
-#include "EventHandling.h"
 #include "BluetoothConnection.h"
 
 
@@ -163,7 +162,7 @@ static void virtual_gps_task(void *arg) {
          size_t n = strnlen(gprmcString,GPRMCLENGTH);
 
         if (n >= 2 && !(gprmcString[n-2] == '\r' && gprmcString[n-1] == '\n')) {
-            if (n + 2 < sizeof gpvtgString) {
+            if (n + 2 < sizeof 80) {
                  gprmcString[n++] = '\r';
                  gprmcString[n++] = '\n';
                  gprmcString[n] = '\0';
@@ -185,16 +184,16 @@ static void virtual_gps_task(void *arg) {
 
 void app_main(void) {
 
-    init_bluetooth_attributes();
+
 
 //bluetooth is not a freertos task!
-//Bluetooth_task();
+Bluetooth_task();
 
 //  xTaskCreatePinnedToCore(GPS_sensor, "GPS_sensor", 4096, (void*)GPSParms, 1, NULL, 1);
 
-xTaskCreatePinnedToCore(virtual_gps_task, "GPS_sensor", 4096, NULL, 1, NULL, 1);
+//xTaskCreatePinnedToCore(virtual_gps_task, "GPS_sensor", 4096, NULL, 1, NULL, 1);
 
-//xTaskCreatePinnedToCore(Bluetooth_task, "Bluetooth", 4096, NULL, 1, NULL, 1);
+//TaskCreatePinnedToCore(Bluetooth_task, "Bluetooth", 4096, NULL, 1, NULL, 1);
 
   
 }

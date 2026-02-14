@@ -5,8 +5,33 @@
 #include <math.h>
 #include <stdbool.h>
 
+#define GPS_DATA_DEFAULTS { \
+    .time = "000000", \
+    .status = 'V', \
+    .latitude = 0.0f, \
+    .lat_hemisphere = 'N', \
+    .longitude = 0.0f, \
+    .lon_hemisphere = 'E', \
+    .speed_knots = 0.0f, \
+    .course_true = 0.0f, \
+    .date = "010120", \
+    .altitude = 0.0f, \
+    .altitude_unit = 'M', \
+    .hdop = 99.9f, \
+    .num_satellites = 0, \
+    .fix_quality = '0', \
+    .geoid_height = 10.0f, \
+    .geoid_unit = 'M', \
+    .age_dgps = 0.0f, \
+    .dgps_station_id = 0, \
+    .speed_kmh = 0.0f, \
+    .course_magnetic = 10.0f, \
+    .mode_indicator = 'N' \
+}
+
 //struct to stored parsed gprmc data
-typedef struct __attribute__((packed)) {
+typedef struct __attribute__((packed)){ 
+//typedef struct {
     char time[7];          // hhmmss.ss
     char status;            // A or V
     float latitude;         // Decimal degrees
@@ -34,11 +59,6 @@ typedef struct __attribute__((packed)) {
     char mode_indicator;   // NMEA 2.3+ mode indicator
 } GpsData;
 
-// //needed for bluetooth
-// typedef union __attribute__((packed)) {
-//      GpsDataStruct gpsStruct;
-//      uint8_t bytes[sizeof(GpsDataStruct)];
-// } GpsData;
 
 //the generate random Nema sentences will be removed
 

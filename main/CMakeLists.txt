@@ -14,4 +14,5 @@ set(srcs "main.c" "GPSDriver.c" "BluetoothConnection.c"
                 freertos
                 esp_adc
                 esp_driver_uart
+                nimble_peripheral_utils
                 )

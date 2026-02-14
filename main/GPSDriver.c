@@ -10,7 +10,14 @@ char *gprmcArray[13];
 
 int indexbuffer = 0;
 
-static GpsData CurrentGpsData = {0};
+static GpsData CurrentGpsData = GPS_DATA_DEFAULTS;
+
+
+    float cog;
+    float sog;
+    char modeInicator;
+
+     char modeInicatorList[] = { 'A', 'D', 'E', 'N', 'P'};
 
 uint8_t* get_gps_data_ptr(void) {
     return (uint8_t*)&CurrentGpsData;
@@ -127,12 +134,6 @@ void generateRandomGPGGA(char* buffer, short len)
 
         add_checksum(buffer, (size_t)len);
 }
-
-    float cog;
-    float sog;
-    char modeInicator;
-
-     char modeInicatorList[] = { 'A', 'D', 'E', 'N', 'P'};
     
 
  void generateRandomGPVTG(char* buffer, short len)

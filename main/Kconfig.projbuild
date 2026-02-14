@@ -32,4 +32,8 @@ menu "Example Configuration"
         default 4
         help
             Maximum number of stations allowed to connect.
- endmenu
+    
+    config EXAMPLE_IO_TYPE
+        int "I/O Capability Type"
+        default 3
+endmenu
