@@ -7,6 +7,7 @@ The firmware integrates GPS and IMU data to create a unified navigation and moti
 
 ## Notice
 BoatTrackingSystem is where the android app lives
+
 BoatTrackingSystemEsp32 folder is where the esp32 tracking project lives
 
 Obtain the "nimble_peripheral_utils" folder from path\to\esp32\example\directory\bluetooth\nimble\common\ and paste it into the BoatTrackingSystemEsp32 folder
