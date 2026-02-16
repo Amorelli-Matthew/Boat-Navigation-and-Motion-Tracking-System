@@ -1,0 +1,39 @@
+menu "Example Configuration"
+
+    config ESP_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+        help
+            SSID (network name) for the example to connect to.
+
+    config ESP_WIFI_PASSWORD
+        string "WiFi Password"
+        default "mypassword"
+        help
+            WiFi password (WPA or WPA2) for the example to use.
+
+    config ESP_MAXIMUM_RETRY
+        int "Maximum retry"
+        default 5
+        help
+            Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
+
+
+    config ESP_WIFI_CHANNEL
+        int "WiFi Channel"
+        range 1 13
+        default 6
+        help
+            WiFi channel for the access point.
+            
+    config ESP_MAX_STA_CONN
+        int "Max STA Connections"
+        range 1 10
+        default 4
+        help
+            Maximum number of stations allowed to connect.
+    
+    config EXAMPLE_IO_TYPE
+        int "I/O Capability Type"
+        default 3
+endmenu
