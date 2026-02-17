@@ -279,67 +279,7 @@ bleprph_print_conn_desc(struct ble_gap_conn_desc *desc)
                 desc->sec_state.authenticated,
                 desc->sec_state.bonded);
 }
-//#endif
 
-#if CONFIG_EXAMPLE_EXTENDED_ADV
-/**
- * Enables advertising with the following parameters:
- *     o General discoverable mode.
- *     o Undirected connectable mode.
- */
-static void
-ext_bleprph_advertise(void)
-{
-    struct ble_gap_ext_adv_params params;
-    struct os_mbuf *data;
-    uint8_t instance = 0;
-    int rc;
-
-    /* First check if any instance is already active */
-    if(ble_gap_ext_adv_active(instance)) {
-        return;
-    }
-
-    /* use defaults for non-set params */
-    memset (&params, 0, sizeof(params));
-
-    /* enable connectable advertising */
-    params.connectable = 1;
-
-    /* advertise using random addr */
-    params.own_addr_type = BLE_OWN_ADDR_PUBLIC;
-
-    params.primary_phy = BLE_HCI_LE_PHY_1M;
-    params.secondary_phy = BLE_HCI_LE_PHY_2M;
-    params.tx_power = 127;
-    params.sid = 1;
-
-    params.itvl_min = BLE_GAP_ADV_FAST_INTERVAL1_MIN;
-    params.itvl_max = BLE_GAP_ADV_FAST_INTERVAL1_MIN;
-
-    /* configure instance 0 */
-    rc = ble_gap_ext_adv_configure(instance, &params, NULL,
-                                   bleprph_gap_event, NULL);
-    assert (rc == 0);
-
-    /* in this case only scan response is allowed */
-
-    /* get mbuf for scan rsp data */
-    data = os_msys_get_pkthdr(sizeof(ext_adv_pattern_1), 0);
-    assert(data);
-
-    /* fill mbuf with scan rsp data */
-    rc = os_mbuf_append(data, ext_adv_pattern_1, sizeof(ext_adv_pattern_1));
-    assert(rc == 0);
-
-    rc = ble_gap_ext_adv_set_data(instance, data);
-    assert (rc == 0);
-
-    /* start advertising */
-    rc = ble_gap_ext_adv_start(instance, 0, 0);
-    assert (rc == 0);
-}
-#else
 /**
  * Enables advertising with the following parameters:
  *     o General discoverable mode.
@@ -420,12 +360,8 @@ scan_rsp.num_uuids128 = 1;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
     rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER,
                            &adv_params, bleprph_gap_event, NULL);
-    // if (rc != 0) {
-    //     MODLOG_DFLT(ERROR, "error enabling advertisement; rc=%d\n", rc);
-    //     return;
-    // }
 }
-#endif
+
 
 #if MYNEWT_VAL(BLE_POWER_CONTROL)
 static void bleprph_power_control(uint16_t conn_handle)
@@ -721,18 +657,8 @@ bleprph_on_sync(void)
 {
     int rc;
 
-#if CONFIG_EXAMPLE_RANDOM_ADDR
-    /* Generate a non-resolvable private address. */
-    ble_app_set_addr();
-#endif
 
-    /* Make sure we have proper identity address set (public preferred) */
-#if CONFIG_EXAMPLE_RANDOM_ADDR
-    rc = ble_hs_util_ensure_addr(1);
-#else
     rc = ble_hs_util_ensure_addr(0);
-#endif
-    assert(rc == 0);
 
     /* Figure out address to use while advertising (no privacy for now) */
     rc = ble_hs_id_infer_auto(0, &own_addr_type);

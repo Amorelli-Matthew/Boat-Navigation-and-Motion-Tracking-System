@@ -2,13 +2,12 @@
 #define EVENTHANDLING_H
 
 #include <stdio.h>
-#include "esp_system.h"        // For system-level control (e.g., deep sleep)
-#include "esp_log.h"           // For logging battery voltage and status
+#include "esp_system.h"        
+#include "esp_log.h"           
 
-#include "freertos/FreeRTOS.h" // For FreeRTOS task handling
-#include "freertos/task.h"     // For creating tasks
-
-#include "esp_adc/adc_oneshot.h" // For ADC OneShot functions
+#include "freertos/FreeRTOS.h" 
+#include "freertos/task.h"     
+#include "esp_adc/adc_oneshot.h"
 
 #define INTERNAL_VOLTAGE_SENSOR ADC1_CHANNEL_0  // Use ADC1_CHANNEL_0 (GPIO36) to measure internal voltage
 #define V_REF 1100  // Internal reference voltage (in mV)

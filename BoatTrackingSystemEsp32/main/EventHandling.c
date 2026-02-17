@@ -63,8 +63,7 @@ void setup_adc() {
 
         // Delay for 60 seconds before checking again
         vTaskDelay(pdMS_TO_TICKS(5000));  // 60 seconds delay
-  
-  //60000
+ 
     }
 
     
