@@ -28,7 +28,12 @@ import com.example.boattrackingsystem.ui.theme.BoatTrackingSystemTheme
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 
 import com.example.boattrackingsystem.BleManager
 class MainActivity : ComponentActivity() {
@@ -43,8 +48,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        //val adapter = (getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
-       // val bleScanner = BleScanner(adapter)
+
         enableEdgeToEdge()
         setContent {
             BoatTrackingSystemTheme(){ //bleScanner: BleScanner
@@ -55,11 +59,23 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@Composable
+fun UncleImage() {
+    // Make sure to actually put an Image() tag here!
+    Image(
+        painter = painterResource(id = R.drawable.unclepicture),
+        contentDescription = "Uncle",
+        modifier = Modifier.fillMaxWidth().height(800.dp)
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable //bleScanner: BleScanner
 fun CenterAlignedTopAppBarExample(bleManager: BleManager,label: String,onLabelUpdate: (String) -> Unit) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+
+    var isImageVisible by remember { mutableStateOf(false) }
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
@@ -73,8 +89,9 @@ fun CenterAlignedTopAppBarExample(bleManager: BleManager,label: String,onLabelUp
                 },
 
                 navigationIcon = {
-                    IconButton(onClick = { onLabelUpdate("Nav button clicked")
-                         }) {
+                    IconButton(onClick = {
+                            isImageVisible = !isImageVisible
+                      }) {
                         Icon(
                             imageVector = Icons.Filled.Menu,
                             contentDescription = "Menu"
@@ -84,7 +101,7 @@ fun CenterAlignedTopAppBarExample(bleManager: BleManager,label: String,onLabelUp
                 actions = {
                     IconButton(onClick = {
                         bleManager.disconnectDevice() }) {
-                    // onLabelUpdate("Back button clicked") }) {
+
                         val backIcon =
                             ImageVector.vectorResource(id = R.drawable.arrow_back_24dp_1f1f1f_fill0_wght400_grad0_opsz24)
                         Icon(
@@ -115,15 +132,15 @@ fun CenterAlignedTopAppBarExample(bleManager: BleManager,label: String,onLabelUp
                 Spacer(modifier = Modifier.width(16.dp))
 
                 FilledButtonExample(  bleManager,     onLabelChange = { newText -> onLabelUpdate(newText) }
-
-
-
                 )
+
             }
 
-
-
             Text(label, modifier = Modifier.padding(16.dp))
+
+            if (isImageVisible) {
+                UncleImage()
+            }
         }
     }
 }
@@ -139,7 +156,6 @@ fun PairWithEsp32Button(bleManager: BleManager, onLabelChange: (String) -> Unit)
 
         if (allGranted) {
             onLabelChange("Scanning for ESP32...")
-            // Use the method you wrote earlier
             bleManager.scanForSpecificDevice("ESP32GPS")
         } else {
             onLabelChange("Permissions Denied - Check Settings")
@@ -161,7 +177,34 @@ fun PairWithEsp32Button(bleManager: BleManager, onLabelChange: (String) -> Unit)
 
 @Composable
 fun FilledButtonExample( bleManager: BleManager, onLabelChange: (String) -> Unit) {
-    Button( onClick = { bleManager.RecieveData() }) {
+    Button( onClick = {
+//        var stringOfBytes = byteArrayOf(
+//            0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x56, 0x00, 0x00,
+//            0x00, 0x00, 0x4E, 0x00, 0x00, 0x00, 0x00, 0x45, 0x00, 0x00,
+//            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x31, 0x30, 0x31,
+//            0x32, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4D, 0xCD.toByte(),
+//            0xCC.toByte(), 0xC7.toByte(), 0x42, 0x00, 0x00, 0x00, 0x00,
+//            0x30, 0x00, 0x00, 0x20, 0x41, 0x4D, 0x00, 0x00, 0x00, 0x00,
+//            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+//            0x20, 0x41, 0x4E
+//        )
+        val stringOfBytes = byteArrayOf(
+            0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x00, 0x56,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x4E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x45, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x30, 0x31, 0x30, 0x31, 0x32, 0x30,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x4D, 0xCD.toByte(), 0xCC.toByte(),
+            0xC7.toByte(), 0x42, 0x00, 0x00, 0x00, 0x00, 0x30, 0x00,
+            0x00, 0x20, 0x41, 0x4D, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x20, 0x41, 0x4E
+        )
+        onLabelChange("Byte array created successfully. Length: ${stringOfBytes.size}")
+        //bleManager.ParseGPSSentence(stringOfBytes)
+
+
+    }) {
         //Text Of Button
         Text("Parse GPS Sentence")
     }

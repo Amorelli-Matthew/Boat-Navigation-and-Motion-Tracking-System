@@ -140,14 +140,10 @@ static void GPS_sensor(void *pv)
             }
         }
 
-        //  ESP_LOGI(TAG, "%s", line);
-
         // Yield predictably so the watchdog stays happy
         vTaskDelayUntil(&last, pdMS_TO_TICKS(20));
     }
 
-    // Never reached
-    // vTaskDelete(NULL);
 }
 
 static void gps_task(void *arg)

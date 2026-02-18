@@ -6,58 +6,68 @@
 #include <stdbool.h>
 
 #define GPS_DATA_DEFAULTS { \
-    .time = "000000", \
-    .status = 'V', \
-    .latitude = 0.0f, \
-    .lat_hemisphere = 'N', \
-    .longitude = 0.0f, \
-    .lon_hemisphere = 'E', \
-    .speed_knots = 0.0f, \
-    .course_true = 0.0f, \
-    .date = "010120", \
+     \
+    .latitude = 0.0, \
+    .longitude = 0.0, \
+    \
+    \
     .altitude = 0.0f, \
-    .altitude_unit = 'M', \
-    .hdop = 99.9f, \
-    .num_satellites = 0, \
-    .fix_quality = '0', \
-    .geoid_height = 10.0f, \
-    .geoid_unit = 'M', \
-    .age_dgps = 0.0f, \
-    .dgps_station_id = 0, \
+    .speed_knots = 0.0f, \
     .speed_kmh = 0.0f, \
+    .course_true = 0.0f, \
     .course_magnetic = 10.0f, \
+    .hdop = 99.9f, \
+    .geoid_height = 10.0f, \
+    .age_dgps = 0.0f, \
+    .num_satellites = 0, \
+    .dgps_station_id = 0, \
+    \
+     \
+    .time = "000000", \
+    .date = "010120", \
+    .status = 'V', \
+    .lat_hemisphere = 'N', \
+    .lon_hemisphere = 'E', \
+    .altitude_unit = 'M', \
+    .fix_quality = '0', \
+    .geoid_unit = 'M', \
     .mode_indicator = 'N' \
 }
 
-//struct to stored parsed gps data
-typedef struct __attribute__((packed)){ 
-//typedef struct {
-    char time[7];          // hhmmss.ss
-    char status;            // A or V
-    float latitude;         // Decimal degrees
-    char lat_hemisphere;    // N or S
-    float longitude;        // Decimal degrees  
-    char lon_hemisphere;    // E or W
-    float speed_knots;      // knots
-    float course_true;      // degrees
-    char date[7];           // ddmmyy
 
-        // GPGGA specific fields
-    float altitude;        // meters above mean sea level
-    char altitude_unit;    // 'M' for meters
-    float hdop;            // Horizontal Dilution of Precision
-    int num_satellites;    // Number of satellites in use
-    char fix_quality;      // 0=no fix, 1=GPS fix, 2=DGPS fix, etc.
+//struct to stored parsed gps data
+//reordering data strctrures so that everything is grouped together by name helps avoide attribute packed
+//typedef struct{ 
+typedef struct __attribute__((packed)) { 
+    
+    //GPRMC
+    char time[7];          // hhmmss\0
+    char status;           // A or V
+    double latitude;       // High precision (8 bytes)
+    char lat_hemisphere;   // N or S
+    double longitude;      // High precision (8 bytes)
+    char lon_hemisphere;   // E or W
+    float speed_knots;     // knots
+    float course_true;     // degrees
+    char date[7];          // ddmmyy\0
+
+    // GPGGA specific fields
+    float altitude;        // meters
+    char altitude_unit;    // 'M'
+    float hdop;            // Horizontal Dilution
+    int num_satellites;    // Number of satellites
+    char fix_quality;      // Fix quality flag
     float geoid_height;    // Geoid separation
-    char geoid_unit;       // 'M' for meters
-    float age_dgps;        // Seconds since last DGPS update
-    int dgps_station_id;   // DGPS station ID
+    char geoid_unit;       // 'M'
+    float age_dgps;        // Seconds since update
+    int dgps_station_id;   // Station ID
     
     // GPVTG specific fields  
     float speed_kmh;       // Speed in km/h
-    float course_magnetic; // Magnetic course (if available)
-    char mode_indicator;   // NMEA 2.3+ mode indicator
+    float course_magnetic; // Magnetic course
+    char mode_indicator;   // NMEA mode flag
 } GpsData;
+
 
 
 //the generate random Nema sentences will be removed

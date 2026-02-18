@@ -202,13 +202,13 @@ void ParseGPRMCMessage(char* buffer, short len)
         CurrentGpsData.latitude = atof(gprmcArray[2]);
 
         // Convert from DDMM.MMMM to decimal degrees
-        float degrees = floor(CurrentGpsData.latitude / 100);
+        double degrees = floor(CurrentGpsData.latitude / 100);
         
-        float minutes = CurrentGpsData.latitude - (degrees * 100);
+        double minutes = CurrentGpsData.latitude - (degrees * 100);
 
         CurrentGpsData.latitude = degrees + (minutes / 60.0f);
         
-        // Apply hemisphere
+        //Apply hemisphere
         if (gprmcArray[3][0] == 'S') {
             CurrentGpsData.latitude = -CurrentGpsData.latitude;
         }
@@ -219,13 +219,13 @@ void ParseGPRMCMessage(char* buffer, short len)
     
         CurrentGpsData.longitude = atof(gprmcArray[4]);
         // Convert from DDDMM.MMMM to decimal degrees
-        float degrees = floor(CurrentGpsData.longitude / 100);
+        double degrees = floor(CurrentGpsData.longitude / 100);
         
-        float minutes = CurrentGpsData.longitude - (degrees * 100);
+        double minutes = CurrentGpsData.longitude - (degrees * 100);
 
         CurrentGpsData.longitude = degrees + (minutes / 60.0f);
         
-        // Apply hemisphere
+        //Apply hemisphere
         if (gprmcArray[5][0] == 'W') {
             CurrentGpsData.longitude = -CurrentGpsData.longitude;
         }
