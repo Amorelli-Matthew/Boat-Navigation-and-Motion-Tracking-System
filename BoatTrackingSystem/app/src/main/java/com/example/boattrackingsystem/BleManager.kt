@@ -5,6 +5,7 @@ import android.bluetooth.le.ScanResult
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import androidx.annotation.Nullable
 import com.welie.blessed.BluetoothCentralManager
 import com.welie.blessed.BluetoothCentralManagerCallback
 import com.welie.blessed.BluetoothPeripheral
@@ -137,104 +138,63 @@ class BleManager(private val context: Context, val onStatusUpdate: (String) -> U
     /*
     Need to update function as some vars like latitude and Longitude are Doubles
     */
-    fun ParseGPSSentence(stringOfBytes: ByteArray) {
+    fun ParseGPSSentence(stringOfBytes: ByteArray) : GpsData? {
         //Demo Mode
 //        if (!servicesReady)
 //            return
-        var time = CharArray(6) { i -> stringOfBytes.copyOfRange(0, 6)[i].toInt().toChar() }
-        var status = stringOfBytes[7].toInt().toChar()
-        var latitude = byteArrayToFloat(stringOfBytes.copyOfRange(8, 12))
-        var latHemisphere = stringOfBytes[12].toInt().toChar()
-        var longitude = byteArrayToFloat(stringOfBytes.copyOfRange(13, 17))
-        var long_hemisphere = stringOfBytes[17].toInt().toChar()
+        val buffer = ByteBuffer.wrap(stringOfBytes).order(ByteOrder.LITTLE_ENDIAN)
+        try {
 
-        var speed = byteArrayToFloat(stringOfBytes.copyOfRange(18, 22))
-        var courseTrue = byteArrayToFloat(stringOfBytes.copyOfRange(22, 26))
+            //create new Temporary GpsObject
+            val currentGpsInterval:GpsData = GpsData(
 
-        var date = CharArray(6) { i -> stringOfBytes.copyOfRange(26, 32)[i].toInt().toChar() }
+             time = String(stringOfBytes, 0, 6, Charsets.US_ASCII),
+            status = stringOfBytes[7].toInt().toChar(),
 
-        var altitude = byteArrayToFloat(stringOfBytes.copyOfRange(33, 37))
-        var altitudeUnit = stringOfBytes[37].toInt().toChar()
-//
-        var hdop = byteArrayToFloat(stringOfBytes.copyOfRange(38, 42))
+             latitude = buffer.getDouble(8),
 
-       var numSatellites = byteArrayToInt(stringOfBytes.copyOfRange(42, 46))
+             latHemisphere = stringOfBytes[16].toInt().toChar(),
 
-      var fixQuality = stringOfBytes[46].toInt().toChar()
-        var geoidHeight = byteArrayToFloat(stringOfBytes.copyOfRange(47, 51))
+            longitude = buffer.getDouble(17),
+            longHemisphere = stringOfBytes[25].toInt().toChar(),
 
-        var geoidUnit = stringOfBytes[51].toInt().toChar()
-       var ageDgps = byteArrayToFloat(stringOfBytes.copyOfRange(52, 56))
-        var dgpsId = byteArrayToInt(stringOfBytes.copyOfRange(56, 60))
-        var speedKmh = byteArrayToFloat(stringOfBytes.copyOfRange(60, 64))
-        var courseMagnetic = byteArrayToFloat(stringOfBytes.copyOfRange(64, 68))
-        var modeIndicator = stringOfBytes[68].toInt().toChar()
+                    speedKnots = buffer.getFloat(26),
+            courseDegrees = buffer.getFloat(30),
 
-        onStatusUpdate(
-            """Raw data: ${stringOfBytes.toHexString( HexFormat {
-                bytes {
-                    byteSeparator = " "
-                    upperCase = true
-                }
-            })}
-    Time: ${time.concatToString()} | Date: ${date.concatToString()}
-    Status: $status | Fix: $fixQuality
-    Pos: $latitude $latHemisphere, $longitude $long_hemisphere
-    Speed: $speed knots ($speedKmh km/h)
-    Course: $courseTrue (Mag: $courseMagnetic)
-    Alt: $altitude $altitudeUnit | | Geoid: $geoidHeight $geoidUnit    Sats: $numSatellites | HDOP: $hdop 
-    Age: $ageDgps | DgpsId: $dgpsId  | Mode: $modeIndicator
-""".trimIndent()
-        )
+            Date = String(stringOfBytes, 34, 6, Charsets.US_ASCII),
+
+         altitude = buffer.getFloat(41),
+        altitudeUnit = stringOfBytes[45].toInt().toChar(),
+
+        hdop = buffer.getFloat(46),
+
+      numOfSatellites = buffer.getInt(50),
+
+      fixQuality = stringOfBytes[54].toInt().toChar(),
+      geoidHeight = buffer.getFloat(55),
+
+       geoidUnit = stringOfBytes[59].toInt().toChar(),
+       ageDgps = buffer.getFloat(60),
+
+       dgpsId = buffer.getInt(64),
+        speedKmh = buffer.getFloat(68),
+        courseMagnetic = buffer.getFloat(72),
+        modeIndicator = stringOfBytes[76].toInt().toChar()
+            );
+
+
+
+            return currentGpsInterval;
+        }
+        catch (e: Exception)
+        {
+            onStatusUpdate(e.toString())
+        }
+
+
+            return null;
+
     }
-
-    //helper for converting bytes to floats
-    fun byteArrayToDouble(bytes: ByteArray): Double {
-        // Ensure the byte array has exactly 4 bytes (size of a Float)
-        require(bytes.size == 4) { "Byte array must have a size of 4 to convert to a single Float" }
-
-        // Wrap the byte array in a ByteBuffer
-        val buffer = ByteBuffer.wrap(bytes)
-
-        // Specify the byte order
-        //little-endian
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-
-        // Get the float value
-        return buffer.getDouble()
-    }
-
-    //helper for converting bytes to floats
-    fun byteArrayToFloat(bytes: ByteArray): Float {
-        // Ensure the byte array has exactly 4 bytes (size of a Float)
-        require(bytes.size == 4) { "Byte array must have a size of 4 to convert to a single Float" }
-
-        // Wrap the byte array in a ByteBuffer
-        val buffer = ByteBuffer.wrap(bytes)
-
-        // Specify the byte order
-        //little-endian
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-
-        // Get the float value
-        return buffer.getFloat()
-    }
-    fun byteArrayToInt(bytes: ByteArray): Int {
-        // Ensure the byte array has exactly 4 bytes (size of a Float)
-        require(bytes.size == 4) { "Byte array must have a size of 4 to convert to a single Float" }
-
-        // Wrap the byte array in a ByteBuffer
-        val buffer = ByteBuffer.wrap(bytes)
-
-        // Specify the byte order
-        //little-endian
-        buffer.order(ByteOrder.LITTLE_ENDIAN)
-
-       // Get the float value
-        return buffer.getInt()
-    }
-
-
 
     }
 
