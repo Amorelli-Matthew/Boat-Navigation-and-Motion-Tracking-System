@@ -49,8 +49,12 @@
 struct ble_hs_cfg;
 struct ble_gatt_register_ctxt;
 
-void BluetoothInit();
+extern uint16_t gatt_svr_chr_val_handle;
+
+
+//void BluetoothInit();
  void Bluetooth_task();
+void setTempString(char*);
 
 void gatt_svr_register_cb(struct ble_gatt_register_ctxt *ctxt, void *arg);
 int gatt_svr_init(void);

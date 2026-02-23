@@ -1,4 +1,4 @@
-set(srcs "main.c" "GPSDriver.c" "BluetoothConnection.c"
+set(srcs "main.c" "GPSDriver.c" "BluetoothConnection.c" 
         )
          
          idf_component_register(

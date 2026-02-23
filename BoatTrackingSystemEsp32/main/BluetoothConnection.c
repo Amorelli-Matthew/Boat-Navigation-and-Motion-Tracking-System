@@ -5,13 +5,12 @@
 extern const ble_uuid128_t gatt_svr_svc_uuid;
 
 static uint8_t gatt_svr_chr_val;
-static uint16_t gatt_svr_chr_val_handle;
-      
 
-
+    
 /* A characteristic that can be subscribed to */
 static uint8_t gatt_svr_chr_val;
-static uint16_t gatt_svr_chr_val_handle;
+
+uint16_t gatt_svr_chr_val_handle;
 
 extern const ble_uuid128_t gatt_svr_chr_uuid;
 
@@ -23,6 +22,10 @@ static int
 gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
                 struct ble_gatt_access_ctxt *ctxt,
                 void *arg);
+
+
+
+
 
 static const struct ble_gatt_svc_def gatt_svr_svcs[] = {
     {
@@ -79,17 +82,6 @@ gatt_svr_write(struct os_mbuf *om, uint16_t min_len, uint16_t max_len,
     return 0;
 }
 
-/**
- * Access callback whenever a characteristic/descriptor is read or written to.
- * Here reads and writes need to be handled.
- * ctxt->op tells weather the operation is read or write and
- * weather it is on a characteristic or descriptor,
- * ctxt->dsc->uuid tells which characteristic/descriptor is accessed.
- * attr_handle give the value handle of the attribute being accessed.
- * Accordingly do:
- *     Append the value to ctxt->om if the operation is READ
- *     Write ctxt->om to the value if the operation is WRITE
- **/
 static int
 gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
                 struct ble_gatt_access_ctxt *ctxt, void *arg)
@@ -99,20 +91,35 @@ gatt_svc_access(uint16_t conn_handle, uint16_t attr_handle,
 
     switch (ctxt->op) {
     case BLE_GATT_ACCESS_OP_READ_CHR:
-        if (conn_handle != BLE_HS_CONN_HANDLE_NONE) {
+        if (conn_handle != BLE_HS_CONN_HANDLE_NONE) 
+        {
             MODLOG_DFLT(INFO, "Characteristic read; conn_handle=%d attr_handle=%d\n",
                         conn_handle, attr_handle);
-        } else {
+        }
+        
+        else 
+        {
             MODLOG_DFLT(INFO, "Characteristic read by NimBLE stack; attr_handle=%d\n",
                         attr_handle);
         }
+        
         uuid = ctxt->chr->uuid;
-        if (attr_handle == gatt_svr_chr_val_handle) {
-            rc = os_mbuf_append(ctxt->om,
-                                get_gps_data_ptr(),
-                                (sizeof(GpsData)));
-            return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
-        }
+        
+if (attr_handle == gatt_svr_chr_val_handle) {
+    if (xSemaphoreTake(gps_mutex, pdMS_TO_TICKS(25)) == pdTRUE) {
+        
+        // Append the struct data to the existing mbuf (ctxt->om)
+        rc = os_mbuf_append(ctxt->om, get_gps_data_ptr(), sizeof(GpsData));
+        
+        xSemaphoreGive(gps_mutex);
+
+        // os_mbuf_append returns 0 on success
+        return rc == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
+    } else {
+        return BLE_ATT_ERR_UNLIKELY; 
+    }
+}
+
         goto unknown;
         /*
     case BLE_GATT_ACCESS_OP_WRITE_CHR:
@@ -208,7 +215,6 @@ gatt_svr_init(void)
 
     ble_svc_gap_init();
     ble_svc_gatt_init();
-   // ble_svc_ans_init();
 
     rc = ble_gatts_count_cfg(gatt_svr_svcs);
     if (rc != 0) {
@@ -226,29 +232,10 @@ gatt_svr_init(void)
     return 0;
 }
 
-///////////////////////
-
-#if CONFIG_EXAMPLE_EXTENDED_ADV
-static uint8_t ext_adv_pattern_1[] = {
-    0x02, 0x01, 0x06,
-    0x03, 0x03, 0xab, 0xcd,
-    0x03, 0x03, 0x18, 0x11,
-    0x11, 0X09, 'n', 'i', 'm', 'b', 'l', 'e', '-', 'b', 'l', 'e', 'p', 'r', 'p', 'h', '-', 'e',
-};
-#endif
 
 static const char *tag = "NimBLE_BLE_PRPH";
 static int bleprph_gap_event(struct ble_gap_event *event, void *arg);
-#if CONFIG_EXAMPLE_RANDOM_ADDR
-static uint8_t own_addr_type = BLE_OWN_ADDR_RANDOM;
-#else
 static uint8_t own_addr_type;
-#endif
-
-#if MYNEWT_VAL(BLE_EATT_CHAN_NUM) > 0
-static uint16_t cids[MYNEWT_VAL(BLE_EATT_CHAN_NUM)];
-static uint16_t bearers;
-#endif
 
 void ble_store_config_init(void);
 
@@ -363,18 +350,6 @@ scan_rsp.num_uuids128 = 1;
 }
 
 
-#if MYNEWT_VAL(BLE_POWER_CONTROL)
-static void bleprph_power_control(uint16_t conn_handle)
-{
-    int rc;
-
-    rc = ble_gap_read_remote_transmit_power_level(conn_handle, 0x01 );  // Attempting on LE 1M phy
-    assert (rc == 0);
-
-    rc = ble_gap_set_transmit_power_reporting_enable(conn_handle, 0x1, 0x1);
-    assert (rc == 0);
-}
-#endif
 
 /**
  * The nimble host executes this callback when a GAP event occurs.  The
@@ -407,22 +382,17 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
         if (event->connect.status == 0) {
             rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
             assert(rc == 0);
-            bleprph_print_conn_desc(&desc);
+            //bleprph_print_conn_desc(&desc);
         }
         MODLOG_DFLT(INFO, "\n");
 
         if (event->connect.status != 0) {
             /* Connection failed; resume advertising. */
-#if CONFIG_EXAMPLE_EXTENDED_ADV
-            ext_bleprph_advertise();
-#else
+
             bleprph_advertise();
-#endif
         }
 
-#if MYNEWT_VAL(BLE_POWER_CONTROL)
-	bleprph_power_control(event->connect.conn_handle);
-#endif
+
         return 0;
 
     case BLE_GAP_EVENT_DISCONNECT:
@@ -430,12 +400,8 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
         bleprph_print_conn_desc(&event->disconnect.conn);
         MODLOG_DFLT(INFO, "\n");
 
-        /* Connection terminated; resume advertising. */
-#if CONFIG_EXAMPLE_EXTENDED_ADV
-        ext_bleprph_advertise();
-#else
+
         bleprph_advertise();
-#endif
         return 0;
 
     case BLE_GAP_EVENT_CONN_UPDATE:
@@ -451,11 +417,8 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_ADV_COMPLETE:
         MODLOG_DFLT(INFO, "advertise complete; reason=%d",
                     event->adv_complete.reason);
-#if CONFIG_EXAMPLE_EXTENDED_ADV
-        ext_bleprph_advertise();
-#else
+
         bleprph_advertise();
-#endif
         return 0;
 
     case BLE_GAP_EVENT_ENC_CHANGE:
@@ -567,62 +530,8 @@ bleprph_gap_event(struct ble_gap_event *event, void *arg)
         event->authorize.out_response = BLE_GAP_AUTHORIZE_REJECT;
         return 0;
 
-#if MYNEWT_VAL(BLE_POWER_CONTROL)
-    case BLE_GAP_EVENT_TRANSMIT_POWER:
-        MODLOG_DFLT(INFO, "Transmit power event : status=%d conn_handle=%d reason=%d "
-                           "phy=%d power_level=%x power_level_flag=%d delta=%d",
-                     event->transmit_power.status,
-                     event->transmit_power.conn_handle,
-                     event->transmit_power.reason,
-                     event->transmit_power.phy,
-                     event->transmit_power.transmit_power_level,
-                     event->transmit_power.transmit_power_level_flag,
-                     event->transmit_power.delta);
-        return 0;
 
-    case BLE_GAP_EVENT_PATHLOSS_THRESHOLD:
-        MODLOG_DFLT(INFO, "Pathloss threshold event : conn_handle=%d current path loss=%d "
-                           "zone_entered =%d",
-                     event->pathloss_threshold.conn_handle,
-                     event->pathloss_threshold.current_path_loss,
-                     event->pathloss_threshold.zone_entered);
-        return 0;
-#endif
 
-#if MYNEWT_VAL(BLE_EATT_CHAN_NUM) > 0
-    case BLE_GAP_EVENT_EATT:
-        MODLOG_DFLT(INFO, "EATT %s : conn_handle=%d cid=%d",
-                event->eatt.status ? "disconnected" : "connected",
-                event->eatt.conn_handle,
-                event->eatt.cid);
-	if (event->eatt.status) {
-		/* Abort if disconnected */
-		return 0;
-	}
-	cids[bearers] = event->eatt.cid;
-	bearers += 1;
-	if (bearers != MYNEWT_VAL(BLE_EATT_CHAN_NUM)) {
-		/* Wait until all EATT bearers are connected before proceeding */
-		return 0;
-	}
-	/* Set the default bearer to use for further procedures */
-	rc = ble_att_set_default_bearer_using_cid(event->eatt.conn_handle, cids[0]);
-	if (rc != 0) {
-		MODLOG_DFLT(INFO, "Cannot set default EATT bearer, rc = %d\n", rc);
-		return rc;
-	}
-
-	return 0;
-#endif
-
-#if MYNEWT_VAL(BLE_CONN_SUBRATING)
-    case BLE_GAP_EVENT_SUBRATE_CHANGE:
-        MODLOG_DFLT(INFO, "Subrate change event : conn_handle=%d status=%d factor=%d",
-                    event->subrate_change.conn_handle,
-                    event->subrate_change.status,
-                    event->subrate_change.subrate_factor);
-        return 0;
-#endif
 
     }
     return 0;
@@ -634,23 +543,6 @@ bleprph_on_reset(int reason)
     MODLOG_DFLT(ERROR, "Resetting state; reason=%d\n", reason);
 }
 
-#if CONFIG_EXAMPLE_RANDOM_ADDR
-static void
-ble_app_set_addr(void)
-{
-    ble_addr_t addr;
-    int rc;
-
-    /* generate new non-resolvable private address */
-    rc = ble_hs_id_gen_rnd(0, &addr);
-    assert(rc == 0);
-
-    /* set generated address */
-    rc = ble_hs_id_set_rnd(addr.val);
-
-    assert(rc == 0);
-}
-#endif
 
 static void
 bleprph_on_sync(void)
@@ -681,7 +573,6 @@ bleprph_on_sync(void)
 
 void bleprph_host_task(void *param)
 {
-    ESP_LOGI(tag, "BLE Host Task Started");
     /* This function will return only when nimble_port_stop() is executed */
     nimble_port_run();
 
@@ -729,11 +620,9 @@ Bluetooth_task(void)
     rc = gatt_svr_init();
     assert(rc == 0);
 
-    /* Set the default device name. */
     rc = ble_svc_gap_device_name_set("ESP32GPS");
     assert(rc == 0);
 
-    /* XXX Need to have template for store */
     ble_store_config_init();
 
     nimble_port_freertos_init(bleprph_host_task);

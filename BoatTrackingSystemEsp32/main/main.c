@@ -146,72 +146,80 @@ static void GPS_sensor(void *pv)
 
 }
 
-static void gps_task(void *arg)
-{
+void EmulateGPStask(void *pv) {
+    // Seed for true randomness
+    srand(time(NULL));
 
-    char gprmcString[128];
-    char gpggaString[96];
-    char gpvtgString[80];
+    GpsData fake_pvt = {0};
+    fake_pvt.lat = 407127760;   
+    fake_pvt.lon = -740059740;  
+    fake_pvt.gSpeed = 5500; 
 
-    TickType_t last = xTaskGetTickCount();
+    while (1) {
+        //Position & Speed Drift
+        fake_pvt.lat += (rand() % 41) - 20; 
+        fake_pvt.lon += (rand() % 41) - 20;
+        
+        int32_t speed_drift = (rand() % 1001) - 500;
+        if (fake_pvt.gSpeed + speed_drift > 0) fake_pvt.gSpeed += speed_drift;
 
-    const TickType_t period = pdMS_TO_TICKS(5000); // 5000 ms
-
-    for (;;)
-    {
-        generateRandomGPRMC(gprmcString, GPRMCLENGTH); // ensure it writes "\r\n" and '\0'
-
-        //     fix line ending if needed
-        size_t n = strnlen(gprmcString, GPRMCLENGTH);
-
-        if (n >= 2 && !(gprmcString[n - 2] == '\r' && gprmcString[n - 1] == '\n'))
-        {
-
-            if (n + 2 < sizeof 80)
-            {
-
-                if (n >= 2 && !(gprmcString[n - 2] == '\r' && gprmcString[n - 1] == '\n'))
-                {
-
-                    if (n + 2 < sizeof gpvtgString)
-                    {
-                        gprmcString[n++] = '\r';
-                        gprmcString[n++] = '\n';
-                        gprmcString[n] = '\0';
-                    }
-                }
-            }
-
-            generateRandomGPGGA(gpggaString, GPGGALENGTH);
-            generateRandomGPVTG(gpvtgString, GPVTGLENTH);
-
-            //   printf("%s\n%s\n%s\n", gprmcString,gpggaString,gpvtgString);  // print
-            //   printf("Size of GpsData: %zu bytes\n", sizeof(GpsData));
-            //  printf("%s\n", gprmcString);  // print
-            ParseGPRMCMessage(gprmcString, 128);
-
-            vTaskDelayUntil(&last, period);                                // yields reliably; Idle tasks get time, WDT stays happy
-            printf("%s\n%s\n%s\n", gprmcString, gpggaString, gpvtgString); // print
-                                                                           //  printf("%s\n", gpggaString);  // print
-
-            // vTaskDelayUntil(&last, period);  // yields reliably; Idle tasks get time, WDT stays happy
-            vTaskDelete(NULL);
+        //Signal Quality Simulation
+        // 10% chance to lose fix (simulating a tunnel or bridge)
+        bool has_fix = (rand() % 100) > 10; 
+        
+        if (has_fix) {
+            fake_pvt.fixType = 3;      // 3D Fix
+            fake_pvt.flags = 0x01;     // gnssFixOK = 1
+            fake_pvt.numSV = 8 + (rand() % 11);
+        } else {
+            fake_pvt.fixType = 0;      // No Fix
+            fake_pvt.flags = 0x00;     // gnssFixOK = 0
+            fake_pvt.numSV = rand() % 4; // 0-3 satellites (not enough for 3D fix)
         }
+
+        fake_pvt.iTOW += 1000;
+
+        //Packet Assembly
+        const size_t payload_len = sizeof(fake_pvt);
+        uint8_t packet[6 + payload_len + 2]; 
+        
+        packet[0] = UBX_SYNC1; 
+        packet[1] = UBX_SYNC2;
+        packet[2] = UBX_NAV_CLASS; 
+        packet[3] = UBX_NAV_PVT_ID;
+        packet[4] = (payload_len & 0xFF); 
+        packet[5] = (payload_len >> 8) & 0xFF;
+        
+        memcpy(&packet[6], &fake_pvt, payload_len);
+
+        uint8_t ca, cb;
+        calculate_mock_checksum(packet, sizeof(packet), &ca, &cb);
+        packet[sizeof(packet) - 2] = ca; 
+        packet[sizeof(packet) - 1] = cb;
+
+        //grab the shared object
+       //if (xSemaphoreTake(gps_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        // Feed to parser
+        for (int i = 0; i < sizeof(packet); i++) {
+            parse_ubx_byte(packet[i]); 
+        }
+
+        //        xSemaphoreGive(gps_mutex);
+
+        //}
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 void app_main(void)
 {
-
-    // BluetoothInit();
-    ESP_LOGI(TAG, "GPS SIZE: %u", getSizeOfGpsVar());
-    ESP_LOGI(TAG, "Alignment: %lu\n", __alignof__(GpsData));
-
+    //InitMux();
+    
     // //bluetooth is not a freertos task!
-    Bluetooth_task();
+   // Bluetooth_task();
 
-    // xTaskCreatePinnedToCore(virtual_gps_task, "GPS_sensor", 4096, NULL, 1, NULL, 1);
+    xTaskCreate(EmulateGPStask, "MockGPS", 4096, NULL, 5, NULL);
 
-    //  xTaskCreatePinnedToCore(GPS_sensor, "gps_task", 4096, NULL, 1, NULL, 1);
-
-    xTaskCreatePinnedToCore(GPS_sensor, "GPS_sensor", 4096, NULL, 1, NULL, 1);
 }
+
+

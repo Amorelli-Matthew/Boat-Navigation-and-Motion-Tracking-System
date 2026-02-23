@@ -1,265 +1,187 @@
 #include "GPSDriver.h"
-
-#include <stdio.h>
-#include <stddef.h>
 #include <string.h>
-#include <stdint.h>
-#include <stdbool.h>
+#include "esp_log.h"
 
-char *gprmcArray[13];
+static const char *TAG = "UBX_PARSER";
 
-int indexbuffer = 0;
+static ubx_state_t state = STATE_IDLE;
+static uint8_t msg_class, msg_id, ck_a, ck_b;
+static uint16_t msg_len, payload_idx;
+static uint8_t payload_buffer[UBX_MAX_PAYLOAD];
 
-static GpsData CurrentGpsData = GPS_DATA_DEFAULTS;
+static GpsData CurrentGpsData;
+
+static int gpsInterval = 2 * 1000 ; //ms
 
 
-    float cog;
-    float sog;
-    char modeInicator;
+//creates shared instance
+SemaphoreHandle_t gps_mutex;
 
-     char modeInicatorList[] = { 'A', 'D', 'E', 'N', 'P'};
+// UBX-CFG-VALSET to enable NAV-PVT on UART1
+//will be used on real hardware but for now commented
+// static  uint8_t enable_pvt[] = {
+//      0xB5, 0x62, 0x06, 0x8A, 0x09, 0x00, 0x00, 0x01, 0x00, 0x00, 
+//      0x07, 0x00, 0x91, 0x20, 0x01, 0x4E, 0x7E
+//  };
+
+ double lat, lon;
+ float speed_kmh;
+
+
+ void InitMux()
+{
+    gps_mutex = xSemaphoreCreateMutex();
+}
 
 uint8_t* get_gps_data_ptr(void) {
     return (uint8_t*)&CurrentGpsData;
 }
-unsigned long getSizeOfGpsVar()
+
+GpsData getData()
 {
-    return sizeof(CurrentGpsData);
+    return CurrentGpsData;
 }
 
-
-uint8_t nmea_checksum_payload(const char* payload)
+int getSizeOfGpsVar()
 {
-    uint8_t cs = 0;
-    if (!payload) return 0;
-
-    // Skip leading '$' if present
-    if (*payload == '$') payload++;
-
-    for (const unsigned char *p = (const unsigned char*)payload; *p; ++p) {
-        if (*p == '*' || *p == '\r' || *p == '\n') break;
-        cs ^= *p;
-    }
-    return cs;
+    return (int)sizeof(CurrentGpsData);
 }
-
-void add_checksum(char *out, size_t outlen) {
-    if (!out || outlen < 5) return;
-
-    uint8_t cs = nmea_checksum_payload(out);
-
-    size_t used = strnlen(out, outlen);
-    if (used + 5 < outlen) {
-        // Append checksum and CRLF
-        snprintf(out + used, outlen - used, "*%02X\r\n", cs);
-    } else {
-        // Not enough space; just terminate safely
-        if (outlen > 0) out[outlen - 1] = '\0';
-    }
-}
-
-
-void generateRandomGPRMC(char* buffer, short len) {
-    
-
-    memset(buffer, 0, (size_t)len);
-
-    //Builds a test buffer with algs to calc the fields
-    
-    int n = snprintf(buffer, (size_t)len,
-        "$GPRMC,%02d%02d%02d,A,%02d%07.4f,%c,%03d%07.4f,%c,%.1f,%.1f,%02d%02d%02d,,",
-        (int)( esp_random() % 24), (int)(esp_random() % 60), (int)(esp_random() % 60),
-        (int)(esp_random() % 90), (double)((esp_random() % 600000) / 10000.0f), (int) ((esp_random() & 1) ? 'N' : 'S'),
-        (int)(esp_random() % 180), (double)((esp_random() % 600000) / 10000.0f),  ((esp_random() & 1) ? 'N' : 'S'),
-        (double)((esp_random() % 2000) / 10.0f),
-        (double)((esp_random() % 3600) / 10.0f),
-       (int) ((esp_random() % 12)), (int)(1 + (esp_random() % 28)), (int)(esp_random() % 100)
-    );
-
-    if (n < 0 || n >= len) {
-        // Truncated or error; ensure termination
-        if (len > 0) buffer[len - 1] = '\0';
-        return;
-    }
-
-    add_checksum(buffer, len);
-}
-
-void generateRandomGPGGA(char* buffer, short len)
-
+void setGpsInterval(int new_interval)
 {
-    if (!buffer || len <= 32) return; 
-
-    //Time (UTC)
-    int hours   = esp_random() % 24;
-    int minutes = esp_random() % 60;
-    int seconds = esp_random() % 60;
-
-    //Latitude
-    int   latDegrees    = esp_random() % 90;                  
-    float latMinutes    = (esp_random() % 600000) / 10000.0f;  
-    char  latHemisphere = (esp_random() & 1) ? 'N' : 'S';
-
-    //Longitude
-    int   lonDegrees    = esp_random() % 180;                 
-    float lonMinutes    = (esp_random() % 600000) / 10000.0f;  
-    char  lonHemisphere = (esp_random() & 1) ? 'E' : 'W';
-
-    //Fix data
-    int   fixQuality    = (esp_random() % 10 < 8) ? 1 : 2;    
-    int   satellitesUsed= 4 + (esp_random() % 9);              
-    float hdop          = 5 + (esp_random() % 21);             
-    hdop /= 10.0f;                                           
-
-    float altitude      = 5 + (esp_random() % 195);            
-    float geoidSep      = 10 + (esp_random() % 30);           
-    
-    // If degrees hit the max, force minutes to 0.0000
-
-    if (latDegrees == 89 && latMinutes > 59.9999f) latMinutes = 59.9999f;
-    if (lonDegrees == 179 && lonMinutes > 59.9999f) lonMinutes = 59.9999f;
-
-    memset(buffer, 0, (size_t)len);
-
-    // $GPGGA
-    int n = snprintf(buffer, (size_t)len,
-        "$GPGGA,%02d%02d%02d,%02d%07.4f,%c,%03d%07.4f,%c,%d,%02d,%.1f,%.1f,M,%.1f,M,,",
-        (hours), minutes, seconds,
-        latDegrees, latMinutes,  latHemisphere,
-        lonDegrees, lonMinutes,  lonHemisphere,
-        fixQuality,
-        satellitesUsed,
-        hdop,
-        altitude,
-        geoidSep
-    );
-
-    if (n < 0 || n >= len) { if (len > 0) buffer[len - 1] = '\0'; return; }
-
-        add_checksum(buffer, (size_t)len);
+    if (new_interval < 100) new_interval = 100; // Minimum 100ms safety
+    if (new_interval > 60000) new_interval = 60000; // Maximum 1 minute safety
+    gpsInterval = new_interval;
 }
-    
 
- void generateRandomGPVTG(char* buffer, short len)
+int getGpsInterval(void)
+{
+    return gpsInterval;
+}
+
+// Checksum calculation: Fletcher-8
+// Calculates over Class, ID, Length, and Payload
+void calculate_mock_checksum(uint8_t *data, size_t len, uint8_t *ck_a, uint8_t *ck_b) {
+    uint8_t a = 0, b = 0;
+    for (size_t i = 2; i < len - 2; i++) { 
+        a += data[i];
+        b += a;
+    }
+    *ck_a = a; 
+    *ck_b = b;
+}
+
+
+
+ //method that parses a nav pvt message
+void parse_UBX_NAV_PVT_message(uint8_t m_class, uint8_t m_id, uint8_t *payload, uint16_t len)
  {
-    // Random course & speed
-    float cog = (esp_random() % 3600) / 10.0f;   // 0.0..359.9°
-    float sog = (esp_random() % 800) / 10.0f;    // 0.0..79.9 knots
+    //method that checks to see if the  message is a nav pvt id
+    if (m_class == UBX_NAV_CLASS && m_id == UBX_NAV_PVT_ID) 
+    {
+        //check if the length is equal to 92 bytes
+        if (len == UBX_NAV_PVT_MAXSIZE) {
+            
+            //copy the payload into a pice of ram
+            memcpy(&CurrentGpsData, payload, sizeof(GpsData));
 
-    // Mode indicator
-    char modeInicatorList[] = { 'A', 'D', 'E', 'N', 'P' };
-    char modeIndicator = modeInicatorList[esp_random() % 5];
+            // Check bit 0 of flags for a valid GNSS Fix
+            if (CurrentGpsData.flags & 0x01) {
+                
+                lat = CurrentGpsData.lat / 10000000.0;
+                lon = CurrentGpsData.lon / 10000000.0;
+                speed_kmh = (CurrentGpsData.gSpeed / 1000.0f) * 3.6f;
 
-    // Convert knots to km/h
-    float sog_kmh = sog * 1.852f;
-
-    memset(buffer, 0, (size_t)len);
-
-    // Build payload
-    int n = snprintf(buffer, (size_t)len,
-        "$GPVTG,%.1f,T,,M,%.1f,N,%.1f,K,%c",
-        cog,
-        sog,
-        sog_kmh,
-        modeIndicator
-    );
-
-    if (n < 0 || n >= len) { if (len > 0) buffer[len - 1] = '\0'; return; }
-
-    // Append checksum + CRLF
-    add_checksum(buffer, (size_t)len);
-  
- }
-
-
-
-
-void ParseGPRMCMessage(char* buffer, short len)
-{
-    indexbuffer = 0;
-    char *token;
-
-    // Skip the GPRMC identifier
-    strsep(&buffer, ",");
-
-    //Read through the identifier
-    while ((token = strsep(&buffer, ",")) != NULL && indexbuffer < 13) {
-        gprmcArray[indexbuffer] = token;
-        printf("Token %d value: %s\n", indexbuffer, gprmcArray[indexbuffer]);
-        indexbuffer++;
-    }
-
-    // Copy time string (first 6 characters)
-        strncpy(CurrentGpsData.time, gprmcArray[0], 6);
-        CurrentGpsData.time[6] = '\0';
-    
-    // Status
-    CurrentGpsData.status = gprmcArray[1][0];
-    
-    
-    // Latitude, needs conversion from DDMM.MMMM to decimal degrees
-    if (gprmcArray[2] != NULL) {
-        CurrentGpsData.latitude = atof(gprmcArray[2]);
-
-        // Convert from DDMM.MMMM to decimal degrees
-        double degrees = floor(CurrentGpsData.latitude / 100);
-        
-        double minutes = CurrentGpsData.latitude - (degrees * 100);
-
-        CurrentGpsData.latitude = degrees + (minutes / 60.0f);
-        
-        //Apply hemisphere
-        if (gprmcArray[3][0] == 'S') {
-            CurrentGpsData.latitude = -CurrentGpsData.latitude;
+                ESP_LOGI(TAG, "FIX OK | Lat: %.7f, Lon: %.7f | Sats: %d | Spd: %.1f km/h", 
+                         lat, lon, CurrentGpsData.numSV, speed_kmh);
+            } else {
+                ESP_LOGW(TAG, "No Fix (Sats: %d, Type: %d)", CurrentGpsData.numSV, CurrentGpsData.fixType);
+            }
         }
     }
     
+    if (m_class == 0x05)
+    {
+        if (m_id == 0x01) ESP_LOGI("UBX", "Command ACK-nowledged");
 
-    // Longitude, needs conversion from DDDMM.MMMM to decimal degrees
+        else if (m_id == 0x00) ESP_LOGE("UBX", "Command NACK-ed (Rejected)");
+    }
     
-        CurrentGpsData.longitude = atof(gprmcArray[4]);
-        // Convert from DDDMM.MMMM to decimal degrees
-        double degrees = floor(CurrentGpsData.longitude / 100);
-        
-        double minutes = CurrentGpsData.longitude - (degrees * 100);
-
-        CurrentGpsData.longitude = degrees + (minutes / 60.0f);
-        
-        //Apply hemisphere
-        if (gprmcArray[5][0] == 'W') {
-            CurrentGpsData.longitude = -CurrentGpsData.longitude;
-        }
-        
-    // Speed in knots
-        CurrentGpsData.speed_knots = atof(gprmcArray[6]);
-    
-    // Course
-        CurrentGpsData.course_true = atof(gprmcArray[7]);
-    
-    
-    // Date
-         strncpy(CurrentGpsData.date, gprmcArray[8], 6);
-        CurrentGpsData.date[6] = '\0';
-        
-    // Valid flag based on status
-    //CurrentGpsData.valid = (CurrentGpsData.status == 'A');
-    
-    // Debug
-    // printf("Date: %s\n", CurrentGpsData.date);
-    // printf("Latitude: %f\n", CurrentGpsData.latitude);
-    // printf("Longitude: %f\n", CurrentGpsData.longitude);
-//    printf("Size of GpsData: %zu bytes\n", sizeof(int));
-
-}
-
-void ParseGPGGAMessage(char* buffer, short len)
-{
-
 }
 
 
- void ParsePVTGMessage(char* buffer, short len)
- {
+void parse_ubx_byte(uint8_t byte) {
+    switch (state) {
+        case STATE_IDLE:
+            if (byte == UBX_SYNC1) state = STATE_SYNC1;
+            break;
 
- }
- 
+        case STATE_SYNC1:
+            if (byte == UBX_SYNC2) {
+                state = STATE_SYNC2;
+                ck_a = 0; ck_b = 0;
+            } else {
+                state = STATE_IDLE;
+            }
+            break;
+
+        case STATE_SYNC2:
+            msg_class = byte;
+            ck_a += byte; ck_b += ck_a;
+            state = STATE_CLASS;
+            break;
+
+        case STATE_CLASS:
+            msg_id = byte;
+            ck_a += byte; ck_b += ck_a;
+            state = STATE_ID;
+            break;
+
+        case STATE_ID:
+            msg_len = byte; // LSB
+            ck_a += byte; ck_b += ck_a;
+            state = STATE_LEN_L; 
+            break;
+
+        case STATE_LEN_L:
+            msg_len |= (byte << 8); // MSB
+            ck_a += byte; ck_b += ck_a;
+            payload_idx = 0;
+            
+            if (msg_len > UBX_MAX_PAYLOAD) {
+                state = STATE_IDLE;
+            } else if (msg_len == 0) {
+                state = STATE_CHKA;
+            } else {
+                 //Ready to parse
+                state = STATE_PAYLOAD;
+            }
+            break;
+
+        case STATE_PAYLOAD:
+            payload_buffer[payload_idx++] = byte;
+            ck_a += byte; ck_b += ck_a;
+            if (payload_idx >= msg_len) state = STATE_CHKA;
+            break;
+
+        case STATE_CHKA:
+            if (byte == ck_a) state = STATE_CHKB;
+            else {
+                ESP_LOGE(TAG, "Checksum A error (Exp: 0x%02X, Got: 0x%02X)", ck_a, byte);
+                state = STATE_IDLE;
+            }
+            break;
+
+        case STATE_CHKB:
+            if (byte == ck_b) {
+                parse_UBX_NAV_PVT_message(msg_class, msg_id, payload_buffer, msg_len);
+            } else {
+                ESP_LOGE(TAG, "Checksum B error (Exp: 0x%02X, Got: 0x%02X)", ck_b, byte);
+            }
+            state = STATE_IDLE;
+            break;
+
+        default:
+            state = STATE_IDLE;
+            break;
+    }
+}

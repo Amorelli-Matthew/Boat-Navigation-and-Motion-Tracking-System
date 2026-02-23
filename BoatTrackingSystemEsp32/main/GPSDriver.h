@@ -1,92 +1,87 @@
-#ifndef GPS_Driver_H
-#define GPS_Driver_H
+#ifndef GPSDRIVER_H
+#define GPSDRIVER_H
 
-#include "esp_random.h"
-#include <math.h>
+#include <string.h>
+#include <stdint.h>
 #include <stdbool.h>
-
-#define GPS_DATA_DEFAULTS { \
-     \
-    .latitude = 0.0, \
-    .longitude = 0.0, \
-    \
-    \
-    .altitude = 0.0f, \
-    .speed_knots = 0.0f, \
-    .speed_kmh = 0.0f, \
-    .course_true = 0.0f, \
-    .course_magnetic = 10.0f, \
-    .hdop = 99.9f, \
-    .geoid_height = 10.0f, \
-    .age_dgps = 0.0f, \
-    .num_satellites = 0, \
-    .dgps_station_id = 0, \
-    \
-     \
-    .time = "000000", \
-    .date = "010120", \
-    .status = 'V', \
-    .lat_hemisphere = 'N', \
-    .lon_hemisphere = 'E', \
-    .altitude_unit = 'M', \
-    .fix_quality = '0', \
-    .geoid_unit = 'M', \
-    .mode_indicator = 'N' \
-}
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 
-//struct to stored parsed gps data
-//reordering data strctrures so that everything is grouped together by name helps avoide attribute packed
-//typedef struct{ 
-typedef struct __attribute__((packed)) { 
-    
-    //GPRMC
-    char time[7];          // hhmmss\0
-    char status;           // A or V
-    double latitude;       // High precision (8 bytes)
-    char lat_hemisphere;   // N or S
-    double longitude;      // High precision (8 bytes)
-    char lon_hemisphere;   // E or W
-    float speed_knots;     // knots
-    float course_true;     // degrees
-    char date[7];          // ddmmyy\0
+// UBX Frame Constants
+#define UBX_SYNC1       0xB5
+#define UBX_SYNC2       0x62
+#define UBX_NAV_CLASS   0x01
+#define UBX_NAV_PVT_ID  0x07
+#define UBX_NAV_PVT_MAXSIZE  92
+#define UBX_MAX_PAYLOAD 128
 
-    // GPGGA specific fields
-    float altitude;        // meters
-    char altitude_unit;    // 'M'
-    float hdop;            // Horizontal Dilution
-    int num_satellites;    // Number of satellites
-    char fix_quality;      // Fix quality flag
-    float geoid_height;    // Geoid separation
-    char geoid_unit;       // 'M'
-    float age_dgps;        // Seconds since update
-    int dgps_station_id;   // Station ID
-    
-    // GPVTG specific fields  
-    float speed_kmh;       // Speed in km/h
-    float course_magnetic; // Magnetic course
-    char mode_indicator;   // NMEA mode flag
+// UBX-NAV-PVT Payload structure in total 92 bytes
+typedef struct __attribute__((packed)) {
+    uint32_t iTOW;       // GPS time of week [ms]
+    uint16_t year;       // Year (UTC)
+    uint8_t  month;      // Month (UTC)
+    uint8_t  day;        // Day (UTC)
+    uint8_t  hour;       // Hour (UTC)
+    uint8_t  min;        // Min (UTC)
+    uint8_t  sec;        // Sec (UTC)
+    uint8_t  valid;      // Validity flags
+    uint32_t tAcc;       // Time accuracy estimate [ns]
+    int32_t  nano;       // Fraction of second [ns]
+    uint8_t  fixType;    // GNSSfix Type (0: no fix, 3: 3D fix... etc)
+    uint8_t  flags;      // Fix status flags
+    uint8_t  flags2;     // Additional flags
+    uint8_t  numSV;      // Number of satellites used in Nav Solution
+    int32_t  lon;        // Longitude [deg * 1e-7]
+    int32_t  lat;        // Latitude [deg * 1e-7]
+    int32_t  height;     // Height above ellipsoid [mm]
+    int32_t  hMSL;       // Height above mean sea level [mm]
+    uint32_t hAcc;       // Horizontal accuracy estimate [mm]
+    uint32_t vAcc;       // Vertical accuracy estimate [mm]
+    int32_t  velN;       // NED north velocity [mm/s]
+    int32_t  velE;       // NED east velocity [mm/s]
+    int32_t  velD;       // NED down velocity [mm/s]
+    int32_t  gSpeed;     // Ground Speed (2D) [mm/s]
+    int32_t  headMot;    // Heading of motion [deg * 1e-5]
+    uint32_t sAcc;       // Speed accuracy estimate [mm/s]
+    uint32_t headAcc;    // Heading accuracy estimate [deg * 1e-5]
+    uint16_t pDOP;       // Position DOP [* 0.01]
+    uint16_t flags3;     // Additional flags
+    uint8_t  reserved1[4]; // Reserved
+    int32_t  headVeh;    // Heading of vehicle [deg * 1e-5]
+    int16_t  magDec;     // Magnetic declination [deg * 1e-2]
+    uint16_t magAcc;     // Magnetic declination accuracy [deg * 1e-2]
 } GpsData;
 
+typedef enum {
+    STATE_IDLE, 
+    STATE_SYNC1, 
+    STATE_SYNC2, 
+    STATE_CLASS, 
+    STATE_ID, 
+    STATE_LEN_L, 
+    STATE_LEN_H, 
+    STATE_PAYLOAD, 
+    STATE_CHKA, 
+    STATE_CHKB
+} ubx_state_t;
 
+extern SemaphoreHandle_t gps_mutex;
 
-//the generate random Nema sentences will be removed
+void setGpsInterval(int new_interval);
+int getGpsInterval(void);
 
 
 uint8_t* get_gps_data_ptr(void);
-unsigned long getSizeOfGpsVar();
+int getSizeOfGpsVar();
 
-void generateRandomGPRMC(char* buffer, short len);
-void ParseGPRMCMessage(char* buffer, short);
+GpsData getData();
 
-void generateRandomGPGGA(char* buffer, short len);
-void ParseGPGGAMessage(char* buffer, short len);
+void InitMux();
 
-void generateRandomGPVTG(char* buffer, short len);
-void ParseGPVTGMessage(char* buffer, short len);
- 
 
-uint8_t nmea_checksum_payload(const char *payload);
-void add_checksum(char *out, size_t outlen);
+//method that parses the ubx bytes
+void parse_ubx_byte(uint8_t byte);
 
+void calculate_mock_checksum(uint8_t *data, size_t len, uint8_t *ck_a, uint8_t *ck_b);
 #endif
